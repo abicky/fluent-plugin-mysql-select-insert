@@ -1,0 +1,8 @@
+sudo: false
+language: ruby
+cache: bundler
+rvm:
+  - 2.5.0
+before_install:
+  - gem install bundler -v 1.16.1
+  - mysql -e 'CREATE DATABASE IF NOT EXISTS fluent_plugin_mysql_select_insert;'
