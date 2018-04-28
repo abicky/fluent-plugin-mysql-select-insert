@@ -211,9 +211,11 @@ class MysqlSelectInsertOutputTest < Test::Unit::TestCase
       condition_column devices.uuid
     CONF
 
-    test "write with ignore false" do
+    setup do
       self.class.new_client.query("INSERT INTO `accessed_users` VALUES (1001)")
+    end
 
+    test "write with ignore false" do
       d = create_driver("#{base_config}\n ignore false")
       assert_raise Mysql2::Error do
         suppress_errors do
@@ -225,8 +227,6 @@ class MysqlSelectInsertOutputTest < Test::Unit::TestCase
     end
 
     test "write with ignore true" do
-      self.class.new_client.query("INSERT INTO `accessed_users` VALUES (1001)")
-
       d = create_driver("#{base_config}\n ignore true")
       assert_nothing_raised do
         d.run(default_tag: "tag") do
