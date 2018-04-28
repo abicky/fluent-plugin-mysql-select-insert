@@ -4,39 +4,42 @@ require "fluent/plugin/out_mysql_select_insert"
 class MysqlSelectInsertOutputTest < Test::Unit::TestCase
   class << self
     def startup
-      new_client.query(<<~SQL)
+      client = new_client
+      client.query(<<~SQL)
         CREATE TABLE IF NOT EXISTS `devices` (
           `id` int(10) unsigned NOT NULL,
           `app_id` int(10) unsigned NOT NULL,
           `uuid` char(36) NOT NULL,
           PRIMARY KEY (`id`),
           UNIQUE KEY (`app_id`, `uuid`)
-        );
+        )
+      SQL
+      client.query(<<~SQL)
         CREATE TABLE IF NOT EXISTS `users` (
           `id` int(10) unsigned NOT NULL,
           `device_id` int(10) unsigned NOT NULL,
           PRIMARY KEY (`id`)
-        );
+        )
+      SQL
+      client.query(<<~SQL)
         CREATE TABLE IF NOT EXISTS `accessed_users` (
           `user_id` int(10) unsigned NOT NULL,
           PRIMARY KEY (`user_id`)
-        );
+        )
       SQL
     end
 
     def shutdown
-      new_client.query(<<~SQL)
-        DROP TABLE IF EXISTS `devices`;
-        DROP TABLE IF EXISTS `users`;
-        DROP TABLE IF EXISTS `accessed_users`;
-      SQL
+      client = new_client
+      client.query("DROP TABLE IF EXISTS `devices`")
+      client.query("DROP TABLE IF EXISTS `users`")
+      client.query("DROP TABLE IF EXISTS `accessed_users`")
     end
 
     def new_client
       Mysql2::Client.new(
         username: "root",
         database: "fluent_plugin_mysql_select_insert",
-        flags: Mysql2::Client::MULTI_STATEMENTS,
       )
     end
   end
@@ -44,26 +47,28 @@ class MysqlSelectInsertOutputTest < Test::Unit::TestCase
   setup do
     Fluent::Test.setup
 
-    self.class.new_client.query(<<~SQL)
+    client = self.class.new_client
+    client.query(<<~SQL)
       INSERT INTO `devices` (`id`, `app_id`, `uuid`) VALUES
         (1, 1, '03449258-29ce-403c-900a-a2c6ea1d09a2'),
         (2, 1, '11aebc82-b661-44ab-951d-d1618058699a'),
         (3, 2, '2c9a7bb7-aec2-441c-ade0-edf31fdacb43'),
-        (4, 2, '3eae0b4b-bdd1-4c82-b04a-5335535f5b7b');
+        (4, 2, '3eae0b4b-bdd1-4c82-b04a-5335535f5b7b')
+    SQL
+    client.query(<<~SQL)
       INSERT INTO `users` (`id`, `device_id`) VALUES
         (1001, 1),
         (1002, 2),
         (1003, 3),
-        (1004, 4);
+        (1004, 4)
     SQL
   end
 
   teardown do
-    self.class.new_client.query(<<~SQL)
-      TRUNCATE TABLE `devices`;
-      TRUNCATE TABLE `users`;
-      TRUNCATE TABLE `accessed_users`;
-    SQL
+    client = self.class.new_client
+    client.query("TRUNCATE TABLE `devices`")
+    client.query("TRUNCATE TABLE `users`")
+    client.query("TRUNCATE TABLE `accessed_users`")
   end
 
   CONFIG = <<~CONF
@@ -197,8 +202,6 @@ class MysqlSelectInsertOutputTest < Test::Unit::TestCase
     CONF
 
     test "write with ignore false" do
-      # XXX: "Mysql2::Error: Table 'fluent_plugin_mysql_select_insert.accessed_users' doesn't exist" occurs without sleep
-      sleep 1
       self.class.new_client.query("INSERT INTO `accessed_users` VALUES (1001)")
 
       d = create_driver("#{base_config}\n ignore false")
