@@ -44,6 +44,16 @@ class MysqlSelectInsertOutputTest < Test::Unit::TestCase
     end
   end
 
+  def suppress_errors
+    prev_value = Thread.report_on_exception
+    # Supporess errors from flush treads
+    Thread.report_on_exception = false
+    # Suppress errors like "unexpected error while after_shutdown"
+    capture_stdout { yield }
+  ensure
+    Thread.report_on_exception = prev_value
+  end
+
   setup do
     Fluent::Test.setup
 
@@ -206,8 +216,10 @@ class MysqlSelectInsertOutputTest < Test::Unit::TestCase
 
       d = create_driver("#{base_config}\n ignore false")
       assert_raise Mysql2::Error do
-        d.run(default_tag: "tag") do
-          d.feed(event_time, { "uuid" => "03449258-29ce-403c-900a-a2c6ea1d09a2", "app_id" => 1 })
+        suppress_errors do
+          d.run(default_tag: "tag") do
+            d.feed(event_time, { "uuid" => "03449258-29ce-403c-900a-a2c6ea1d09a2", "app_id" => 1 })
+          end
         end
       end
     end
