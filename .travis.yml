@@ -2,5 +2,8 @@ language: ruby
 cache: bundler
 rvm:
   - 2.5.0
+
+services:
+  - mysql
 before_install:
   - mysql -e 'CREATE DATABASE IF NOT EXISTS fluent_plugin_mysql_select_insert;'
