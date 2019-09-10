@@ -42,6 +42,8 @@ module Fluent
         desc: "Key whose value is used in WHERE clause to compare with 'condition_column'"
       config_param :extra_condition, :array, value_type: :string, default: [],
         desc: "Extra condition used in WHERE clause. You can specify placeholders like 'col1 = ? AND col2 = ?, ${tag[0]}, ${tag[1]}'. The metadata is extracted in the second or following arguments."
+      config_param :inserted_columns, :array, value_type: :string, default: nil,
+        desc: "Columns to be inserted. You should insert all columns by the select query if you don't specify the value."
 
       config_param :ignore, :bool, default: false,
         desc: "Add 'IGNORE' modifier to INSERT statement"
@@ -56,6 +58,9 @@ module Fluent
         if select_query =~ /\bwhere\b/i
           fail Fluent::ConfigError, "You can't specify WHERE clause in 'select_query'"
         end
+        if select_query !~ /\A\s*select\b/i
+          fail Fluent::ConfigError, "'select_query' should begin with 'SELECT'"
+        end
       end
 
       def write(chunk)
@@ -64,19 +69,29 @@ module Fluent
         chunk.msgpack_each do |time, record|
           condition_values << "'#{client.escape(record[condition_key])}'"
         end
+
         sql = <<~SQL
-          INSERT #{"IGNORE" if ignore} INTO `#{table}` #{select_query}
+          INSERT #{"IGNORE" if ignore} INTO `#{table}` #{"(#{inserted_columns.join(",")})" if inserted_columns}
+          #{select_query}
           WHERE #{condition_column} IN (#{condition_values.join(",")})
         SQL
-
         sql << " AND (#{extra_condition[0]})" unless extra_condition.empty?
-        if extra_condition.size < 2
-          client.query(sql)
-        else
-          require "mysql2-cs-bind"
-          bound_params = extra_condition[1..-1].map { |c| extract_placeholders(c, chunk.metadata) }
-          client.xquery(sql, bound_params)
+
+        bound_params = extra_condition[1..-1]&.map { |c| extract_placeholders(c, chunk.metadata) }
+        begin
+          if bound_params.nil? || bound_params.empty?
+            client.query(sql)
+          else
+            require "mysql2-cs-bind"
+            client.xquery(sql, bound_params)
+          end
+        rescue Mysql2::Error => e
+          if e.message.start_with?("Column count doesn't match value count")
+            raise Fluent::UnrecoverableError, "#{e.class}: #{e}"
+          end
+          raise
         end
+
         client.close
       end
 

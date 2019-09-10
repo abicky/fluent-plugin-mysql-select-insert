@@ -236,6 +236,36 @@ class MysqlSelectInsertOutputTest < Test::Unit::TestCase
     end
   end
 
+  sub_test_case "'inserted_columns' is specified" do
+    setup do
+      self.class.new_client.query("ALTER TABLE `accessed_users` ADD `extra_column` VARCHAR(63) DEFAULT 'default'")
+    end
+
+    teardown do
+      self.class.new_client.query("ALTER TABLE `accessed_users` DROP `extra_column`")
+    end
+
+    test "write with inserted_columns" do
+      d = create_driver("#{CONFIG}\n inserted_columns 'user_id'")
+      d.run(default_tag: "tag") do
+        d.feed(event_time, { "uuid" => "03449258-29ce-403c-900a-a2c6ea1d09a2", "app_id" => 1 })
+      end
+      result = self.class.new_client.query('SELECT * FROM `accessed_users`')
+      assert_equal [{ "user_id" => 1001, "extra_column" => "default" }], result.to_a
+    end
+
+    test "write with invalid inserted_columns" do
+      d = create_driver("#{CONFIG}\n inserted_columns 'user_id, extra_column'")
+
+      d.run(default_tag: "tag") do
+        d.feed(event_time, { "uuid" => "03449258-29ce-403c-900a-a2c6ea1d09a2", "app_id" => 1 })
+      end
+      assert do
+        d.logs.any? { |l| l.include?("got unrecoverable error") && l.include?("Column count doesn't match") }
+      end
+    end
+  end
+
   sub_test_case "WHERE clause is specified in 'select_query'" do
     test "configure" do
       assert_raise Fluent::ConfigError do
@@ -246,6 +276,33 @@ class MysqlSelectInsertOutputTest < Test::Unit::TestCase
           table accessed_users
 
           select_query "SELECT
+              users.id
+            FROM
+              users
+              INNER JOIN
+                devices
+              ON
+                devices.id = users.device_id
+            WHERE
+              app_id = 1"
+
+          condition_key uuid
+          condition_column devices.uuid
+        CONF
+      end
+    end
+  end
+
+  sub_test_case "'select_query' doesn't begin with 'SELECT'" do
+    test "configure" do
+      assert_raise Fluent::ConfigError do
+        create_driver(<<~CONF)
+          database fluent_plugin_mysql_select_insert
+          username root
+
+          table accessed_users
+
+          select_query "(id) SELECT
               users.id
             FROM
               users

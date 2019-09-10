@@ -39,6 +39,7 @@ select_query | SELECT query without WHERE clause to insert records | (required)
 condition_column | Column used in WHERE clause to compare with values of 'condition_key' in events | (required)
 condition_key | Key whose value is used in WHERE clause to compare with 'condition_column' | (required)
 extra_condition | Extra condition used in WHERE clause. You can specify placeholders like 'col1 = ? AND col2 = ?, ${tag[0]}, ${tag[1]}'. The metadata is extracted in the second or following arguments. | (empty array)
+inserted_columns | Columns to be inserted. You should insert all columns by the select query if you don't specify the value. | nil
 ignore    | Add 'IGNORE' modifier to INSERT statement | false
 
 ## Example Configuration
